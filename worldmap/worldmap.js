@@ -39,7 +39,6 @@ var oldBounds = {ne:{lat:0, lng:0}, sw:{lat:0, lng:0}};
 var edgeLayer = new L.layerGroup();
 var edgeEnabled = true;
 var pmtloaded = "";
-
 var iconSz = {
     "Team/Crew": 24,
     "Squad": 24,
@@ -58,6 +57,7 @@ var iconSz = {
 };
 
 var filesAdded = '';
+if ( window.self !== window.top ) { inIframe = true; }
 
 import { setupLeafletMouseCoordinates } from './leaflet/leaflet.mousecoordinate.mjs'
 
@@ -142,8 +142,8 @@ var connect = function() {
         DISCONNECTED = !navigator.onLine
         while(wsQueue.length) {
             const args = wsQueue.at(0)
+            if (inIframe) window.top.postMessage(args, '*')
             if (DISCONNECTED) {
-                console.log('send', { args, DISCONNECTED })
                 wsStore.setMany(wsQueue.map((a) => [new Date().valueOf(), a]))
                 wsQueue.length = 0
             } else {
@@ -177,7 +177,7 @@ var connect = function() {
         }
         setTimeout(function() { connect(); }, 2500);
     };
-    ws.onmessage = function(e) {
+    const onmessage = function(e) {
         try {
             var data = JSON.parse(e.data);
             if (data.hasOwnProperty("type") && data.hasOwnProperty("data") && data.type === "Buffer") { data = data.data.toString(); }
@@ -185,7 +185,9 @@ var connect = function() {
         }
         catch (e) { if (data) { console.log("BAD DATA",data); console.log(e); } }
         // console.log("DATA",typeof data,data);
-    };
+    }
+    ws.onmessage = onmessage;
+    if (inIframe) window.onmessage = onmessage
 };
 console.log("CONNECT TO",location.pathname + 'socket');
 
@@ -276,7 +278,7 @@ document.addEventListener ("keydown", function (ev) {
     }
 });
 
-if ( window.self !== window.top ) { inIframe = true; }
+
 if (inIframe === true) {
     if ( window.localStorage.hasOwnProperty("lastpos") ) {
         var sp = JSON.parse(window.localStorage.getItem("lastpos"));
