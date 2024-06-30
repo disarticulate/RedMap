@@ -59,6 +59,10 @@ var iconSz = {
 
 var filesAdded = '';
 
+import { setupLeafletMouseCoordinates } from './leaflet/leaflet.mousecoordinate.mjs'
+
+setupLeafletMouseCoordinates(L)
+
 var loadStatic = function(fileName) {
     if (filesAdded.indexOf(fileName) !== -1) { return; }
     var head = document.getElementsByTagName('head')[0]
@@ -83,19 +87,73 @@ var loadStatic = function(fileName) {
         console.log("Unsupported file type: ",fileName);
     }
 }
-
+const createPersistence = ({ dbKey, dbName }) => {
+    const kv = idbKeyval
+    const store = kv.createStore(`${dbName}-${dbKey}`, dbKey)
+    return {
+      set(key, value) {
+        return kv.set(key, value, store)
+      },
+      update(key, fn) {
+        return kv.update(key, fn, store)
+      },
+      clear() {
+        return kv.clear(store)
+      },
+      del(key) {
+        return kv.del(key, store)
+      },
+      get(key) {
+        return kv.get(key, store)
+      },
+      entries() {
+        return kv.entries(store)
+      },
+      values() {
+        return kv.values(store)
+      },
+      keys() {
+        return kv.keys(store)
+      },
+      delMany(keys) {
+        return kv.delMany(keys, store)
+      },
+      getMany(keys) {
+        return kv.getMany(keys, store)
+      },
+      setMany(entries) {
+        return kv.setMany(entries, store)
+      },
+    }
+  }
 // Create the socket
 var connect = function() {
     // var transports = ["websocket", "xhr-streaming", "xhr-polling"],
     ws = new SockJS(location.pathname.split("index")[0] + 'socket');
-    // create queue and throttle events 
+    // create queue and throttle events
+    let DISCONNECTED = true
     const _wsSend = ws.send
     const wsQueue = []
     const wsSendSpeed = 100
+    const wsDb = 'ws-worldmap'
+    const wsKey = 'nodered'
+    const wsStore = createPersistence({ dbName: wsDb, dbKey: wsKey })
     setInterval(() => {
+        DISCONNECTED = !navigator.onLine
         while(wsQueue.length) {
-            console.log('send', wsQueue.at(0))
-            _wsSend.call(ws, wsQueue.shift())
+            const args = wsQueue.at(0)
+            if (DISCONNECTED) {
+                console.log('send', { args, DISCONNECTED })
+                wsStore.setMany(wsQueue.map((a) => [new Date().valueOf(), a]))
+                wsQueue.length = 0
+            } else {
+                wsStore.values().then((values) => {
+                    if (values.length) wsStore.clear().then(() => {
+                        wsQueue.unshift(...values)
+                    })
+                })
+                _wsSend.call(ws, wsQueue.shift())
+            }
         }
     }, wsSendSpeed)
     ws.send = (...args) => {
@@ -104,6 +162,7 @@ var connect = function() {
     }
     ws.onopen = function() {
         console.log("CONNECTED");
+        DISCONNECTED = false
         if (!inIframe) {
             document.getElementById("footer").innerHTML = "<font color='#494'>"+pagefoot+"</font>";
         }
@@ -112,6 +171,7 @@ var connect = function() {
     };
     ws.onclose = function() {
         console.log("DISCONNECTED");
+        DISCONNECTED = true
         if (!inIframe) {
             document.getElementById("footer").innerHTML = "<font color='#900'>"+pagefoot+"</font>";
         }
@@ -197,7 +257,9 @@ overlays["countries"] = layers["_countries"];
 
 var onoffline = function() { if (!navigator.onLine) {
     if (pmtloaded !== "") { basemaps[pmtloaded].addTo(map); layercontrol._update(); }
-    else { map.addLayer(overlays["countries"]); }
+    else {
+        //map.addLayer(overlays["countries"]);
+    }
 } }
 
 document.addEventListener ("keydown", function (ev) {
@@ -435,6 +497,15 @@ if (!inIframe) { helpMenu += '<tr><td style="cursor:default"><span id="showHelp"
 else { helpMenu += '</table>' }
 document.getElementById('menu').innerHTML = helpMenu;
 
+globalThis.doSearch = doSearch
+globalThis.setMaxAge = setMaxAge
+globalThis.setCluster = setCluster
+globalThis.doPanit = doPanit
+globalThis.doLock = doLock
+globalThis.doHeatAll = doHeatAll
+globalThis.doDialog = doDialog
+
+
 // Add graticule
 var showGrid = false;
 var showRuler = false;
@@ -460,9 +531,9 @@ var edgeAware = function() {
     var mapBounds = map.getBounds();
     var mapBoundsCenter = mapBounds.getCenter();
 
-    pSW = map.options.crs.latLngToPoint(mapBounds.getSouthWest(), map.getZoom());
-    pNE = map.options.crs.latLngToPoint(mapBounds.getNorthEast(), map.getZoom());
-    pCenter = map.options.crs.latLngToPoint(mapBoundsCenter, map.getZoom());
+    let pSW = map.options.crs.latLngToPoint(mapBounds.getSouthWest(), map.getZoom());
+    let pNE = map.options.crs.latLngToPoint(mapBounds.getNorthEast(), map.getZoom());
+    let pCenter = map.options.crs.latLngToPoint(mapBoundsCenter, map.getZoom());
 
     var viewBounds = L.latLngBounds(map.options.crs.pointToLatLng(L.point(pSW.x - (pCenter.x - pSW.x ), pSW.y - (pCenter.y - pSW.y )), map.getZoom()) , map.options.crs.pointToLatLng(L.point(pNE.x + (pNE.x - pCenter.x) , pNE.y + (pNE.y - pCenter.y) ), map.getZoom()) );
     for (var id in markers) {
@@ -834,7 +905,7 @@ map.on('locationerror', onLocationError);
 
 // single right click to add a marker
 var addmenu = "<b>Add marker</b><br><input type='text' id='rinput' autofocus onkeydown='if (event.keyCode == 13) addThing();' placeholder='name (,icon/SIDC, layer, colour, heading)'/>";
-if (navigator.onLine) { addmenu += '<br/><a href="https://www.spatialillusions.com/unitgenerator-legacy/" target="_new">MilSymbol SIDC generator</a>'; }
+if (navigator.onLine) { addmenu += `<br/>Icons: [<i class="fa fa-xmark"></i> xmark]`; }
 var rightmenuMap = L.popup({keepInView:true, minWidth:260}).setContent(addmenu);
 
 const rgba2hex = (rgba) => `#${rgba.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+\.{0,1}\d*))?\)$/).slice(1).map((n, i) => (i === 3 ? Math.round(parseFloat(n) * 255) : parseFloat(n)).toString(16).padStart(2, '0').replace('NaN', '')).join('')}`;
@@ -852,7 +923,7 @@ var hiderightclick = false;
 var addThing = function() {
     var thing = document.getElementById('rinput').value;
     map.closePopup();
-    //popped = false;
+    let popped = false;
     var bits = thing.split(",");
     var icon = (bits[1] || "circle").trim();
     var lay = (bits[2] || "unknown").trim(); // TODO: Do we want _drawing here or unknown ?
@@ -1145,7 +1216,6 @@ var addBaseMaps = function(maplist,first) {
     if (baselayername) { basemaps[baselayername].addTo(map); }
     if (showLayerMenu) {
         map.removeControl(layercontrol);
-        map.addControl(LeafletOffline.savetiles(basemaps[layerlookup["OSMG"]]))
         layercontrol = L.control.layers(basemaps, overlays).addTo(map);
     }
 }
@@ -2601,6 +2671,7 @@ function doCommand(cmd) {
         if (cmd.coords.includes("utm")) { opts.utm = true; }
         if (cmd.coords.includes("mgrs")) { opts.utmref = true; }
         if (cmd.coords.includes("qth")) { opts.qth = true; }
+        if (cmd.coords.includes("kclfcrs")) { opts.kclfcrs = true; }
         coords.options = opts;
         coords.addTo(map);
     }
@@ -3465,3 +3536,8 @@ function handleCoTtypes(d,p) {
     }
     return d;
 }
+
+globalThis.addThing = addThing
+globalThis.editPoly = editPoly
+globalThis.delMarker = delMarker
+globalThis.popped = false

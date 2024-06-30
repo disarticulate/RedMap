@@ -28,6 +28,8 @@
     <!-- <link rel="import" href="worldmaphead.html"> -->
 
     <link rel="stylesheet" type="text/css" href="leaflet/font-awesome/css/font-awesome.min.css"/>
+    <link rel="stylesheet" type="text/css" href="leaflet/font-awesome/css/brands.min.css"/>
+    <link rel="stylesheet" type="text/css" href="leaflet/font-awesome/css/solid.min.css"/>
     <link rel="stylesheet" type="text/css" href="leaflet/weather-icons-lite/css/weather-icons-lite.min.css"/>
     <link rel="stylesheet" type="text/css" href="leaflet/leaflet.css"/>
     <link rel="stylesheet" type="text/css" href="leaflet/leaflet-vector-markers.css">
@@ -47,6 +49,7 @@
     <script src="leaflet/idb-keyval.js"></script>
     <script src="leaflet/sockjs.min.js"></script>
     <script src="leaflet/idb.js"></script>
+    <script src="leaflet/proj4.js"></script>
     <script src="leaflet/leaflet.js"></script>
     <script src="leaflet/leaflet.offline.js"></script>
     <script src="leaflet/leaflet-vector-markers.min.js"></script>
@@ -76,7 +79,7 @@
     <script src="leaflet/togeojson.umd.js"></script>
     <script src="leaflet/leaflet-kmz.js"></script>
     <script src="leaflet/leaflet-rotate.js"></script>
-    <script src="leaflet/leaflet.mousecoordinate.js"></script>
+    <script src="leaflet/leaflet.mousecoordinate.mjs" type="module"></script>
     <script src="leaflet/leaflet.latlng-graticule.js"></script>
     <script src="leaflet/VectorTileLayer.umd.min.js"></script>
     <script src="leaflet/esri-leaflet.js"></script>
@@ -103,6 +106,6 @@
 <div id="map"></div>
 <div id="footer"></div>
 
-<script src="worldmap.js"></script>
+<script src="worldmap.js" type="module"></script>
 </body>
 </html>
