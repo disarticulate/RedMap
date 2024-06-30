@@ -1,7 +1,7 @@
 /* eslint-disable no-undef */
 
-var startpos = [51.05, -1.38];  // Start location - somewhere in UK :-)
-var startzoom = 10;
+var startpos = [-95.01259675666053, 45.27496432723016];  // Start location - somewhere in UK :-)
+var startzoom = 15;
 
 var ws;
 var map;
@@ -88,6 +88,20 @@ var loadStatic = function(fileName) {
 var connect = function() {
     // var transports = ["websocket", "xhr-streaming", "xhr-polling"],
     ws = new SockJS(location.pathname.split("index")[0] + 'socket');
+    // create queue and throttle events 
+    const _wsSend = ws.send
+    const wsQueue = []
+    const wsSendSpeed = 100
+    setInterval(() => {
+        while(wsQueue.length) {
+            console.log('send', wsQueue.at(0))
+            _wsSend.call(ws, wsQueue.shift())
+        }
+    }, wsSendSpeed)
+    ws.send = (...args) => {
+        wsQueue.push(args)
+        //_wsSend.call(ws, ...args)
+    }
     ws.onopen = function() {
         console.log("CONNECTED");
         if (!inIframe) {
@@ -247,6 +261,7 @@ var handleFiles = function(files) {
 
 var readFile = function(file) {
     // Check if the file is text or kml
+    console.log('readFile', file)
     if (file.type &&
         file.type.indexOf('text') === -1 &&
         file.type.indexOf('kml') === -1 &&
@@ -962,12 +977,34 @@ var addBaseMaps = function(maplist,first) {
             window.location.href("index3d.html");
         }
         if (maplist.indexOf("OSMG")!==-1) {
-            basemaps[layerlookup["OSMG"]] = new L.TileLayer.Grayscale(osmUrl, {
+            basemaps[layerlookup["OSMG"]] = new LeafletOffline.tileLayerOffline(osmUrl, {
                 attribution:osmAttrib,
                 maxNativeZoom:19,
                 maxZoom:20,
                 subdomains: ['a','b','c']
             });
+            basemaps[layerlookup["OSMG"]].on("tileload", (event) => {
+                const { tile } = event;
+                const url = tile.src;
+                if (url.search("blob:") !== -1) {
+                  console.debug(`Loaded ${url} from idb`);
+                  return;
+                }
+                const { x, y, z } = event.coords;
+                const { _url: urlTemplate } = event.target;
+                const tileInfo = {
+                  key: url,
+                  url,
+                  x,
+                  y,
+                  z,
+                  urlTemplate,
+                  createdAt: Date.now(),
+                };
+                LeafletOffline.downloadTile(url)
+                  .then((dl) => LeafletOffline.saveTile(tileInfo, dl))
+                  // .then(() => console.debug(`Saved ${url} in idb`));
+              });
         }
         if (maplist.indexOf("OSMC")!==-1) {
             basemaps[layerlookup["OSMC"]] = new L.TileLayer(osmUrl, {
@@ -1096,7 +1133,7 @@ var addBaseMaps = function(maplist,first) {
             });
         }
     }
-
+    console.log('basemaps', basemaps)
     if (first) {
         if (layerlookup[first]) { baselayername = layerlookup[first]; }
         else { baselayername = first; }
@@ -1108,6 +1145,7 @@ var addBaseMaps = function(maplist,first) {
     if (baselayername) { basemaps[baselayername].addTo(map); }
     if (showLayerMenu) {
         map.removeControl(layercontrol);
+        map.addControl(LeafletOffline.savetiles(basemaps[layerlookup["OSMG"]]))
         layercontrol = L.control.layers(basemaps, overlays).addTo(map);
     }
 }
