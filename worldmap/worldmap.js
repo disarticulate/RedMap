@@ -1506,6 +1506,12 @@ var addOverlays = function(overlist) {
         overlays["heatmap"] = layers["_heat"];
     }
 
+    // Add Roads layer
+    if (overlist.indexOf("ROADS")) {
+        var customTopoLayer = L.geoJson(null, {clickable:false, style: {color:"blue", weight:2, fillColor:"#cf6", fillOpacity:0.04}});
+        layers["_countries"] = omnivore.topojson('images/world-50m-flat.json',null,customTopoLayer);
+        overlays["countries"] = layers["_countries"];
+    }
     if (showLayerMenu) {
         map.removeControl(layercontrol);
         layercontrol = L.control.layers(basemaps, overlays).addTo(map);
@@ -2524,13 +2530,14 @@ var custIco = function() {
 
 // handle any incoming COMMANDS to control the map remotely
 function doCommand(cmd) {
-    // console.log("COMMAND",cmd);
+    console.log("COMMAND", cmd);
     if (cmd.init && cmd.hasOwnProperty("maplist")) {
         //basemaps = {};
         addBaseMaps(cmd.maplist,cmd.layer);
     }
     if (cmd.init && cmd.hasOwnProperty("overlist")) {
         overlays = [];
+        console.log('doCommand:init', cmd)
         addOverlays(cmd.overlist);
     }
     if (cmd.hasOwnProperty("toptitle")) {
@@ -2792,7 +2799,7 @@ function doCommand(cmd) {
             if (opt.hasOwnProperty("style")) { opt.style = new Function('return ' + opt.style)(); }
             else {
                 opt.style = function(feature) {
-                    var st = { stroke:true, weight:2, fill:true };
+                    var st = { stroke:true, weight:2, fill: ['Polygon', 'MultiPolygon'].includes(feature?.geometry?.type) };
                     if (feature.hasOwnProperty("properties")) {
                         st.color = feature.properties.color||feature.properties.roofColor||"black";
                         if (feature.properties.hasOwnProperty("color")) { delete feature.properties.color; }
@@ -2801,6 +2808,9 @@ function doCommand(cmd) {
                     if (feature.hasOwnProperty("properties") && feature.properties.hasOwnProperty('style')) {
                         if (feature.properties.style.hasOwnProperty('stroke')) {
                             st.color = feature.properties.style.stroke;
+                        }
+                        if (feature.properties.style.hasOwnProperty('dashArray')) {
+                            st.dashArray = feature.properties.style.dashArray;
                         }
                         if (feature.properties.style.hasOwnProperty('stroke-width')) {
                             st.weight = feature.properties.style["stroke-width"];
